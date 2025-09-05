@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>今天就要吃這家 🍱</title>
+  <style>
+    body {
+      background: #0f172a;
+      color: #e5e7eb;
+      font-family: system-ui, "Microsoft JhengHei", sans-serif;
+      text-align: center;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 { margin-bottom: 10px; }
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .cell {
+      background: #111827;
+      border: 1px solid rgba(255,255,255,.2);
+      padding: 10px;
+      border-radius: 10px;
+      min-height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: 0.2s;
+      font-weight: bold;
+    }
+    .active { background: #60a5fa; color: #fff; }
+    .chosen { background: #ef4444; color: #fff; }
+    .done { background: #6b7280; color: #ccc; text-decoration: line-through; }
+    .btn {
+      padding: 10px 20px;
+      margin: 10px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+    }
+    .start { background: #2563eb; color: white; }
+    .stop { background: #dc2626; color: white; }
+  </style>
+</head>
+<body>
+  <h1>今天就要吃這家 🍱</h1>
+  <p>多人同步抽籤，按停止會寄信紀錄</p>
+
+  <button id="startBtn" class="btn start">開始</button>
+  <button id="stopBtn" class="btn stop" disabled>停止</button>
+
+  <div id="grid"></div>
+
+  <audio id="bgm" src="https://files.catbox.moe/7qx5m1.mp3" loop></audio>
+
+  <!-- Firebase Modular SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js";
+    import { getDatabase, ref, set, update, onValue, get } from "https://www.gstatic.com/firebasejs/9.22.2/firebase-database.js";
+
+    /***************
+     * 1) 餐廳清單
+     ***************/
+    const RESTAURANTS = [
+      "一夫排骨","腐乳豬","冠宏涼麵","林家水餃","武村風味便當","譚老爺北平麵食","69 PIZZA",
+      "寶麗點心廚房","咆飽飽創意鍋燒","阿昇廚房","八兩五骨鴨","同昌大雞腿","朱麵屋",
+      "鳳林山西刀削麵","華新牛排","老江紅茶","古早魏","便當爺爺","越錦食堂","林家涼麵",
+      "老闆不夠辣","竹棧複合式","真心食坊","東港飯湯","中庄麵館","北平京廚","39 PIZZA",
+      "今年貴羹","江鳥紅","蘑菇咖哩","米之谷海鮮湯飯","快樂牛排","無名便當","赤山肉圓",
+      "大咖咖哩","福園餡餅粥","古糧碳烤三明治","大廟口鹽水雞","帝王炒飯","花之壽司"
+    ];
+
+    /***************
+     * 2) Firebase
+     ***************/
+    const firebaseConfig = {
+      apiKey: "AIzaSyCF5pYecoUpZuUWrVt6XsPaY1pEUj6SAQQ",
+      authDomain: "banto-game-1af51.firebaseapp.com",
+      databaseURL: "https://banto-game-1af51-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "banto-game-1af51",
+      storageBucket: "banto-game-1af51.firebasestorage.app",
+      messagingSenderId: "927905075193",
+      appId: "1:927905075193:web:0ecff1815f990bbf01b728",
+      measurementId: "G-DSM6S2E324"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const gameRef = ref(db, "bentoGame");
+
+    /***************
+     * 3) Google Apps Script
+     ***************/
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbyhiX0NkulmssuqddIRzFaHs8qtkp2m6p-Z8P9YMwCqUYt4E__cf7tSuuJiH-8TgrqwGw/exec";
+
+    /***************
+     * 4) UI 初始化
+     ***************/
+    const grid = document.getElementById("grid");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+    const bgm = document.getElementById("bgm");
+
+    let state = { running: false, active: -1, chosen: null, done: [] };
+    let timer = null;
+
+    RESTAURANTS.forEach((name, i) => {
+      const div = document.createElement("div");
+      div.className = "cell";
+      div.textContent = name;
+      div.id = "cell-" + i;
+      grid.appendChild(div);
+    });
+
+    function render(s) {
+      RESTAURANTS.forEach((_, i) => {
+        const cell = document.getElementById("cell-" + i);
+        cell.className = "cell";
+        if (s.done.includes(i)) cell.classList.add("done");
+        if (s.active === i) cell.classList.add("active");
+        if (s.chosen === i) cell.classList.add("chosen");
+      });
+    }
+
+    /***************
+     * 5) 按鈕事件
+     ***************/
+    startBtn.onclick = async () => {
+      if (state.running) return;
+      bgm.play().catch(e => console.log("音樂播放被阻擋:", e));
+
+      let available = RESTAURANTS.map((_,i)=>i).filter(i=>!state.done.includes(i));
+      if (available.length === 0) {
+        state.done = [];
+        available = RESTAURANTS.map((_,i)=>i);
+      }
+
+      timer = setInterval(() => {
+        const idx = available[Math.floor(Math.random()*available.length)];
+        state.active = idx; // 本地更新
+        update(gameRef, { running: true, active: idx, chosen: null });
+      }, 100);
+
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+    };
+
+    stopBtn.onclick = () => {
+      clearInterval(timer);
+      bgm.pause();
+
+      const chosen = state.active;
+      if (chosen === -1) return; // 防呆
+
+      state.done.push(chosen);
+      update(gameRef, { running: false, active: -1, chosen, done: state.done });
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+
+      // 寄信
+      fetch(GAS_URL, {
+        method: "POST",
+        body: JSON.stringify({ chosen: RESTAURANTS[chosen] })
+      }).catch(err => console.error("寄信失敗:", err));
+    };
+
+    /***************
+     * 6) Firebase 監聽
+     ***************/
+    onValue(gameRef, (snap) => {
+      const s = snap.val();
+      if (!s) return;
+      state = s;
+      render(state);
+
+      if (s.running && !timer) {
+        bgm.play().catch(err => console.log("自動播放被阻擋:", err));
+      }
+    });
+
+    // 初始化狀態
+    get(gameRef).then(snap => {
+      if (!snap.exists()) {
+        set(gameRef, state);
+      } else {
+        state = snap.val();
+        render(state);
+      }
+    });
+  </script>
+</body>
+</html>
