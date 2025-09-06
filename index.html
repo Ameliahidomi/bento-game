@@ -56,6 +56,7 @@
 
   <div id="grid"></div>
 
+  <!-- 你的音樂檔 -->
   <audio id="bgm" src="music.mp3" loop></audio>
 
   <!-- Firebase Modular SDK -->
@@ -83,7 +84,7 @@
       authDomain: "banto-game-1af51.firebaseapp.com",
       databaseURL: "https://banto-game-1af51-default-rtdb.asia-southeast1.firebasedatabase.app",
       projectId: "banto-game-1af51",
-      storageBucket: "banto-game-1af51.firebasestorage.app",
+      storageBucket: "banto-game-1af51.appspot.com",
       messagingSenderId: "927905075193",
       appId: "1:927905075193:web:0ecff1815f990bbf01b728",
       measurementId: "G-DSM6S2E324"
@@ -122,8 +123,8 @@
         const cell = document.getElementById("cell-" + i);
         cell.className = "cell";
         if (s.done && Array.isArray(s.done) && s.done.includes(i)) {
-            cell.classList.add("done");
-         }
+          cell.classList.add("done");
+        }
         if (s.active === i) cell.classList.add("active");
         if (s.chosen === i) cell.classList.add("chosen");
       });
@@ -132,11 +133,11 @@
     /***************
      * 5) 按鈕事件
      ***************/
-    startBtn.onclick = async () => {
+    startBtn.onclick = () => {
       if (state.running) return;
       bgm.play().catch(e => console.log("音樂播放被阻擋:", e));
 
-      let available = RESTAURANTS.map((_,i)=>i).filter(i=>!state.done.includes(i));
+      let available = RESTAURANTS.map((_,i)=>i).filter(i=>!(state.done||[]).includes(i));
       if (available.length === 0) {
         state.done = [];
         available = RESTAURANTS.map((_,i)=>i);
@@ -154,13 +155,15 @@
 
     stopBtn.onclick = () => {
       clearInterval(timer);
+      timer = null;
       bgm.pause();
 
       const chosen = state.active;
-      if (chosen === -1) return; // 防呆
+      if (chosen === -1) return;
 
       state.done.push(chosen);
       update(gameRef, { running: false, active: -1, chosen, done: state.done });
+
       startBtn.disabled = false;
       stopBtn.disabled = true;
 
@@ -188,7 +191,7 @@
     // 初始化狀態
     get(gameRef).then(snap => {
       if (!snap.exists()) {
-        set(gameRef, state);
+        set(gameRef, state);   // 初始化
       } else {
         state = snap.val();
         render(state);
@@ -197,7 +200,3 @@
   </script>
 </body>
 </html>
-
-
-
-
