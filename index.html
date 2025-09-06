@@ -56,7 +56,7 @@
 
   <div id="grid"></div>
 
-  <audio id="bgm" src="https://mega.nz/file/VJQhwSgZ#adetBhp9oqM3CMs-IdnUTsY1C7HIt9BAHmsSusorKlQ" loop></audio>
+  <audio id="bgm" src="music.mp3" loop></audio>
 
   <!-- Firebase Modular SDK -->
   <script type="module">
@@ -121,7 +121,9 @@
       RESTAURANTS.forEach((_, i) => {
         const cell = document.getElementById("cell-" + i);
         cell.className = "cell";
-        if (s.done.includes(i)) cell.classList.add("done");
+        if (s.done && Array.isArray(s.done) && s.done.includes(i)) {
+            cell.classList.add("done");
+         }
         if (s.active === i) cell.classList.add("active");
         if (s.chosen === i) cell.classList.add("chosen");
       });
@@ -195,5 +197,6 @@
   </script>
 </body>
 </html>
+
 
 
